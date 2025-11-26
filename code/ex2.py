@@ -1,10 +1,9 @@
+from matplotlib.lines import Line2D
 import numpy as np
 from matplotlib import pyplot as plt
 from typing import Callable
 from os import path
-from ex2_utils import plot_predictions_gt
-
-DATA_DIRECTORY = path.abspath('data/')
+from ex2_utils import plot_predictions_gt, DATA_DIRECTORY
 
 def polynomial_basis_functions(degree: int) -> Callable:
     """
@@ -63,7 +62,8 @@ def learn_prior(hours: np.ndarray, temps: np.ndarray, basis_func: Callable) -> t
     for i, t in enumerate(temps):
         ln = LinearRegression(basis_func).fit(hours, t)
         # todo <your code here>
-        thetas.append(None)  # append learned parameters here
+        theta_vec = ln.theta
+        thetas.append(theta_vec)  # append learned parameters here
 
     thetas = np.array(thetas)
 
@@ -112,9 +112,15 @@ class BayesianLinearRegression:
         """
         # todo <your code here>
         d_matrix = self.basis_functions(X)
-        if hasattr(self, 'post_mean'):
-            return d_matrix @ self.post_mean
-        return None
+        current_mean = self.prior_mean if not hasattr(self, 'post_mean') else self.post_mean
+        pred_mean = d_matrix @ current_mean
+        epistemic_variance = np.diag(d_matrix @ (self.prior_cov if not hasattr(self, 'post_cov') else self.post_cov) @ d_matrix.T)
+
+        total_variance = epistemic_variance + (self.sigma ** 2)
+
+        pred_std = np.sqrt(total_variance)
+        
+        return pred_mean, pred_std
 
     def fit_predict(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
         """
@@ -193,6 +199,114 @@ class LinearRegression:
         self.fit(X, y)
         return self.predict(X)
 
+def plot_predictions_for_bayesian_model(
+        train_hours: np.ndarray,
+        train_temps: np.ndarray,
+        predict_hours: np.ndarray,
+        predicted_mean_temps: np.ndarray,
+        pred_std: np.ndarray,
+        title: str,
+        save_path: str,
+        model: BayesianLinearRegression,
+        num_samples: int = 5
+    ):
+    """    
+    Args:
+    train_hours (np.array of shape (hours,)): The input hours used for training.
+    train_temps (np.array of shape (number of years, hours)): the observed temperatures used for training.
+    predict_hours (np.array of shape (hours,)): The input hours for which predictions are made.
+    predicted_mean_temps (np.array of shape (hours,)): The mean predicted temperatures from the model.
+    pred_std (np.array of shape (hours,)): The standard deviation of the predicted temperatures.
+    title (str): Title for the graph.
+    save_path (str): Path to save the plotted graph.
+    model: BayesianLinearRegression, the Bayesian linear regression model.
+    num_samples (int): Number of prior samples to plot.
+    """
+    plt.figure(figsize=(10, 6))
+    
+    plt.plot(train_hours, train_temps[0], color='gray', alpha=0.3, linewidth=1, label='Historical Data', zorder=1)
+    for i in range(1, len(train_temps)):
+        plt.plot(train_hours, train_temps[i], color='gray', alpha=0.3, linewidth=1, label='Historical Data', zorder=1)
+    
+    plt.plot(predict_hours, predicted_mean_temps, color='black', linewidth=3, label='Prior Mean', zorder=3)
+
+    plt.fill_between(predict_hours,
+                     predicted_mean_temps - pred_std, 
+                     predicted_mean_temps + pred_std, 
+                     color='blue', alpha=0.2, label='Confidence Interval (1$\sigma$)', zorder=2)
+    
+    jitter = 1e-6 * np.eye(len(model.prior_cov))
+    safe_cov = model.prior_cov + jitter
+    sampled_thetas = np.random.multivariate_normal(model.prior_mean, safe_cov, num_samples)
+    Phi_dense = model.basis_functions(predict_hours)
+    for i, theta_sample in enumerate(sampled_thetas):
+        # Calculate curve: y = Phi * theta
+        y_sample = Phi_dense @ theta_sample
+        plt.plot(predict_hours, y_sample, linestyle='--', linewidth=1, alpha=0.8, label=f'Prior Sample {i+1}', zorder=4)
+
+
+    # 5. Styling
+    plt.title(title)
+    plt.xlabel('Time of Day (Hours)')
+    plt.ylabel('Temperature')
+    plt.xlim(0, 24)
+    # Use a smart legend that doesn't show every single history line
+    handles, labels = plt.gca().get_legend_handles_labels()
+    # Filter out duplicate labels if necessary, though Matplotlib usually handles unique labels well
+    by_label = dict(zip(labels, handles))
+    if 'Historical Data' in by_label:
+        by_label['Historical Data'] = Line2D([0], [0], color='gray', linewidth=1)
+        
+    plt.legend(by_label.values(), by_label.keys(), loc='upper left', fontsize='small')
+    
+    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.savefig(save_path)
+    
+    # plt.show()
+
+def classical_linear_regression(train_hours, train_temperature, test_hours, test_temperatures, degrees):
+    for d in degrees:
+        ln = LinearRegression(polynomial_basis_functions(d)).fit(train_hours, train_temperature)
+
+        # print average squared error performance
+        pred_mean = ln.predict(test_hours)
+        squared_errors = (test_temperatures - pred_mean) ** 2
+        mse = np.mean(squared_errors)
+        print(f'Average squared error with LR and d={d} is {mse:.2f}')
+        
+        # plot graphs for linear regression part
+        # todo <your code here>
+        plot_predictions_gt(hours=test_hours,
+                            true_temps=test_temperatures,
+                            predicted_temps=pred_mean,
+                            save_path=path.join(DATA_DIRECTORY, f'true_vs_pred_temps_d{d}_lr.png'),
+                            title=f'LR Predictions vs Ground Truth (d={d})\nMSE={mse:.2f}')
+
+def bayesian_linear_regression(degrees, hours, temps, sigma):
+    for deg in degrees:
+        pbf = polynomial_basis_functions(deg)
+        mu, cov = learn_prior(hours, temps, pbf)
+
+        blr = BayesianLinearRegression(mu, cov, sigma, pbf)
+
+        # plot prior graphs
+        hours_to_predict = np.arange(0, 24, 0.1)
+        pred_mean, pred_std = blr.predict(hours_to_predict)
+        plot_predictions_for_bayesian_model(
+            train_hours=hours,
+            train_temps=temps,
+            predict_hours=hours_to_predict,
+            predicted_mean_temps=pred_mean,
+            pred_std=pred_std,
+            deg=deg,
+            title=f'Bayesian LR - Prior Predictions (Degree={deg})',
+            save_path=path.join(DATA_DIRECTORY, f'bayesian_lr_prior_deg{deg}.png'),
+            model=blr,
+        )
+
+
+        # plot posterior graphs
+        # todo <your code here>
 
 def main():
     nov_16_path = path.join(DATA_DIRECTORY, 'nov162024.npy')
@@ -208,22 +322,7 @@ def main():
     degrees = [3, 7]
 
     # ----------------------------------------- Classical Linear Regression
-    for d in degrees:
-        ln = LinearRegression(polynomial_basis_functions(d)).fit(train_hours, train_temperature)
-
-        # print average squared error performance
-        predictions = ln.predict(test_hours)
-        squared_errors = (test_temperatures - predictions) ** 2
-        mse = np.mean(squared_errors)
-        print(f'Average squared error with LR and d={d} is {mse:.2f}')
-        
-        # plot graphs for linear regression part
-        # todo <your code here>
-        plot_predictions_gt(hours=test_hours,
-                            true_temps=test_temperatures,
-                            predicted_temps=predictions,
-                            save_path=path.join(DATA_DIRECTORY, f'true_vs_pred_temps_d{d}_lr.png'),
-                            title=f'LR Predictions vs Ground Truth (d={d})')
+    classical_linear_regression(train_hours, train_temperature, test_hours, test_temperatures, degrees)
 
     # ----------------------------------------- Bayesian Linear Regression
 
@@ -235,28 +334,15 @@ def main():
 
     # setup the model parameters
     sigma = 0.25
-    degrees = [3, 7]  # polynomial basis functions degrees
-
     # frequencies for Fourier basis
     freqs = [1, 2, 3]
-
     # sets of knots K_1, K_2 and K_3 for the regression splines
     knots = [np.array([12]),
              np.array([8, 16]),
              np.array([6, 12, 18])]
 
     # ---------------------- polynomial basis functions
-    for deg in degrees:
-        pbf = polynomial_basis_functions(deg)
-        mu, cov = learn_prior(hours, temps, pbf)
-
-        blr = BayesianLinearRegression(mu, cov, sigma, pbf)
-
-        # plot prior graphs
-        # todo <your code here>
-
-        # plot posterior graphs
-        # todo <your code here>
+    bayesian_linear_regression(degrees, hours, temps, sigma)
 
     # ---------------------- Gaussian basis functions
     for ind, K in enumerate(freqs):
