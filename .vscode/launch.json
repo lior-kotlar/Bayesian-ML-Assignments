@@ -1,0 +1,24 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+
+        {
+            "name": "Pydbg: ex2",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "C:\\Users\\liork\\Documents\\Masters\\master modules\\Bayesian Machine Learning\\Bayesian-ML-Assignments\\code\\ex2.py",
+            "console": "integratedTerminal"
+        }
+    ]
+}

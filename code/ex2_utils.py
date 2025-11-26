@@ -3,6 +3,39 @@ from scipy.ndimage import convolve
 from skimage.color import rgb2gray
 from matplotlib import pyplot as plt
 
+def plot_predictions_gt(hours: np.ndarray, true_temps: np.ndarray, predicted_temps: np.ndarray, save_path: str, title: str = 'Predictions vs Ground Truth'):
+    """
+    Plots true temperatures and predicted temperatures on the same graph.
+    
+    Args:
+        hours (np.array): The time points (x-axis).
+        true_temps (np.array): The ground truth temperatures.
+        predicted_temps (np.array): The model's predictions.
+        title (str): Title for the graph.
+    """
+    plt.figure(figsize=(10, 6))
+    
+    # Plot True Data:
+    # We use 'o' (dots) to show specific data points and a solid line to show continuity.
+    # alpha=0.6 makes it slightly transparent so it doesn't dominate the prediction.
+    plt.plot(hours, true_temps, 'o-', color='blue', label='True Temperature', alpha=0.6, markersize=5)
+    
+    # Plot Predicted Data:
+    # We use a dashed line ('--') and a distinct color (red or orange) to differentiate it.
+    # linewidth=2 makes the prediction stand out.
+    plt.plot(hours, predicted_temps, '--', color='darkorange', label='Predicted Temperature', linewidth=2)
+    
+    # Labeling
+    plt.xlabel('Time of Day (Hours)')
+    plt.ylabel('Temperature')
+    plt.title(title)
+    plt.legend()
+    
+    # Grid and limits make the graph easier to read technically
+    plt.grid(True, linestyle=':', alpha=0.6)
+    plt.xlim(hours.min(), hours.max())
+    plt.savefig(save_path)
+    # plt.show()
 
 def temps_example():
     """

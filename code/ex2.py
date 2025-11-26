@@ -1,7 +1,10 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from typing import Callable
+from os import path
+from ex2_utils import plot_predictions_gt
 
+DATA_DIRECTORY = path.abspath('data/')
 
 def polynomial_basis_functions(degree: int) -> Callable:
     """
@@ -12,7 +15,9 @@ def polynomial_basis_functions(degree: int) -> Callable:
     """
     def pbf(x: np.ndarray):
         # todo <your code here>
-        return np.vander(x, degree + 1, increasing=True)
+        scaled_x = x / degree
+        design_matrix = np.vander(scaled_x, degree + 1, increasing=True)
+        return design_matrix
     
     return pbf
 
@@ -79,7 +84,10 @@ class BayesianLinearRegression:
         :param basis_functions:     a function that receives data points as inputs and returns a design matrix
         """
         # todo <your code here>
-        pass
+        self.basis_functions = basis_functions
+        self.prior_mean = theta_mean
+        self.prior_cov = theta_cov
+        self.sigma = sig
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> 'BayesianLinearRegression':
         """
@@ -89,6 +97,11 @@ class BayesianLinearRegression:
         :return: the fitted model
         """
         # todo <your code here>
+        d_matrix = self.basis_functions(X)
+        inv_post_cov = np.linalg.inv(np.linalg.inv(self.prior_cov) + (1 / self.sigma**2) * (d_matrix.T @ d_matrix))
+        epsilon = 1e-6
+        self.post_cov = np.linalg.inv(inv_post_cov + epsilon*np.eye(len(inv_post_cov)))
+        self.post_mean = self.post_cov @ (np.linalg.inv(self.prior_cov) @ self.prior_mean + (1 / self.sigma**2) * (d_matrix.T @ y))
         return self
 
     def predict(self, X: np.ndarray) -> np.ndarray:
@@ -98,6 +111,9 @@ class BayesianLinearRegression:
         :return: the predictions for X
         """
         # todo <your code here>
+        d_matrix = self.basis_functions(X)
+        if hasattr(self, 'post_mean'):
+            return d_matrix @ self.post_mean
         return None
 
     def fit_predict(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -137,7 +153,9 @@ class LinearRegression:
         :param basis_functions:     a function that receives data points as inputs and returns a design matrix
         """
         # todo <your code here>
-        pass
+        self.basis_functions = basis_functions
+        self.theta = None
+        
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> 'LinearRegression':
         """
@@ -147,7 +165,10 @@ class LinearRegression:
         :return: the fitted model
         """
         # todo <your code here>
-        return None
+        d_matrix = self.basis_functions(X)
+        self.theta = np.linalg.solve(d_matrix.T @ d_matrix, d_matrix.T @ y)
+        # self.theta = np.linalg.pinv(d_matrix.T @ d_matrix) @ d_matrix.T @ y
+        return self
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         """
@@ -156,7 +177,11 @@ class LinearRegression:
         :return: the predictions for X
         """
         # todo <your code here>
-        return None
+        d_matrix = self.basis_functions(X)
+        if self.theta is not None:
+            return d_matrix @ self.theta
+        
+        raise ValueError("Model is not fitted yet.")
 
     def fit_predict(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
         """
@@ -170,31 +195,41 @@ class LinearRegression:
 
 
 def main():
+    nov_16_path = path.join(DATA_DIRECTORY, 'nov162024.npy')
     # load the data for November 16 2024
-    nov16 = np.load('nov162024.npy')
+    nov16_temperatures = np.load(nov_16_path)
     nov16_hours = np.arange(0, 24, .5)
-    train = nov16[:len(nov16)//2]
-    train_hours = nov16_hours[:len(nov16)//2]
-    test = nov16[len(nov16)//2:]
-    test_hours = nov16_hours[len(nov16)//2:]
+    train_temperature = nov16_temperatures[:len(nov16_temperatures)//2]
+    train_hours = nov16_hours[:len(nov16_temperatures)//2]
+    test_temperatures = nov16_temperatures[len(nov16_temperatures)//2:]
+    test_hours = nov16_hours[len(nov16_temperatures)//2:]
 
     # setup the model parameters
     degrees = [3, 7]
 
     # ----------------------------------------- Classical Linear Regression
     for d in degrees:
-        ln = LinearRegression(polynomial_basis_functions(d)).fit(train_hours, train)
+        ln = LinearRegression(polynomial_basis_functions(d)).fit(train_hours, train_temperature)
 
         # print average squared error performance
-        print(f'Average squared error with LR and d={d} is {np.mean((test - ln.predict(test_hours))**2):.2f}')
-
+        predictions = ln.predict(test_hours)
+        squared_errors = (test_temperatures - predictions) ** 2
+        mse = np.mean(squared_errors)
+        print(f'Average squared error with LR and d={d} is {mse:.2f}')
+        
         # plot graphs for linear regression part
         # todo <your code here>
+        plot_predictions_gt(hours=test_hours,
+                            true_temps=test_temperatures,
+                            predicted_temps=predictions,
+                            save_path=path.join(DATA_DIRECTORY, f'true_vs_pred_temps_d{d}_lr.png'),
+                            title=f'LR Predictions vs Ground Truth (d={d})')
 
     # ----------------------------------------- Bayesian Linear Regression
 
+    jerus_daytemps_path = path.join(DATA_DIRECTORY, 'jerus_daytemps.npy')
     # load the historic data
-    temps = np.load('jerus_daytemps.npy').astype(np.float64)
+    temps = np.load(jerus_daytemps_path).astype(np.float64)
     hours = np.array([2, 5, 8, 11, 14, 17, 20, 23]).astype(np.float64)
     x = np.arange(0, 24, .1)
 
