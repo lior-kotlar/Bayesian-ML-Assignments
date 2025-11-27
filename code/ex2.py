@@ -3,7 +3,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from typing import Callable
 from os import path
-from ex2_utils import plot_predictions_gt, DATA_DIRECTORY
+from ex2_utils import plot_predictions_gt, INPUT_DATA_DIRECTORY, OUTPUT_DATA_DIRECTORY
 
 def polynomial_basis_functions(degree: int) -> Callable:
     """
@@ -30,7 +30,15 @@ def fourier_basis_functions(num_freqs: int) -> Callable:
     """
     def fbf(x: np.ndarray):
         # todo <your code here>
-        return None
+        design_matrix = np.ones((len(x), 1))
+        for k in range(1, num_freqs + 1):
+            cos_term = np.cos(2*np.pi*k*x/24.0)
+            design_matrix = np.column_stack((design_matrix, cos_term))
+        for k in range(1, num_freqs + 1):
+            sin_term = np.sin(2*np.pi*k*x/24.0)
+            design_matrix = np.column_stack((design_matrix, sin_term))
+        return design_matrix
+    
     return fbf
 
 
@@ -43,7 +51,11 @@ def spline_basis_functions(knots: np.ndarray) -> Callable:
     """
     def csbf(x: np.ndarray):
         # todo <your code here>
-        return None
+        design_matrix = np.vander(x, 4, increasing=True)
+        for knot in knots:
+            term = np.maximum(0, x - knot) ** 3
+            design_matrix = np.column_stack((design_matrix, term))
+        return design_matrix
     return csbf
 
 
@@ -73,7 +85,6 @@ def learn_prior(hours: np.ndarray, temps: np.ndarray, basis_func: Callable) -> t
     cov = (thetas - mu[None, :]).T @ (thetas - mu[None, :]) / thetas.shape[0]
     return mu, cov
 
-
 class BayesianLinearRegression:
     def __init__(self, theta_mean: np.ndarray, theta_cov: np.ndarray, sig: float, basis_functions: Callable):
         """
@@ -98,10 +109,17 @@ class BayesianLinearRegression:
         """
         # todo <your code here>
         d_matrix = self.basis_functions(X)
-        inv_post_cov = np.linalg.inv(np.linalg.inv(self.prior_cov) + (1 / self.sigma**2) * (d_matrix.T @ d_matrix))
         epsilon = 1e-6
-        self.post_cov = np.linalg.inv(inv_post_cov + epsilon*np.eye(len(inv_post_cov)))
-        self.post_mean = self.post_cov @ (np.linalg.inv(self.prior_cov) @ self.prior_mean + (1 / self.sigma**2) * (d_matrix.T @ y))
+        jitter = epsilon * np.eye(len(self.prior_cov))
+        inv_prior__cov = np.linalg.inv(self.prior_cov + jitter)
+        inv_posterior_cov = inv_prior__cov + (1.0 / self.sigma**2) * (d_matrix.T @ d_matrix)
+        self.posterior_cov = np.linalg.inv(inv_posterior_cov + jitter)
+        self.posterior_mean = self.posterior_cov @ (inv_prior__cov @ self.prior_mean + (1.0 / self.sigma**2) * (d_matrix.T @ y))
+        # d_matrix = self.basis_functions(X)
+        # inv_post_cov = np.linalg.inv(np.linalg.inv(self.prior_cov) + (1 / self.sigma**2) * (d_matrix.T @ d_matrix))
+        # epsilon = 1e-6
+        # self.posterior_cov = np.linalg.inv(inv_post_cov + epsilon*np.eye(len(inv_post_cov)))
+        # self.posterior_mean = self.posterior_cov @ (np.linalg.inv(self.prior_cov) @ self.prior_mean + (1 / self.sigma**2) * (d_matrix.T @ y))
         return self
 
     def predict(self, X: np.ndarray) -> np.ndarray:
@@ -112,9 +130,9 @@ class BayesianLinearRegression:
         """
         # todo <your code here>
         d_matrix = self.basis_functions(X)
-        current_mean = self.prior_mean if not hasattr(self, 'post_mean') else self.post_mean
+        current_mean = self.prior_mean if not hasattr(self, 'post_mean') else self.posterior_mean
         pred_mean = d_matrix @ current_mean
-        epistemic_variance = np.diag(d_matrix @ (self.prior_cov if not hasattr(self, 'post_cov') else self.post_cov) @ d_matrix.T)
+        epistemic_variance = np.diag(d_matrix @ (self.prior_cov if not hasattr(self, 'post_cov') else self.posterior_cov) @ d_matrix.T)
 
         total_variance = epistemic_variance + (self.sigma ** 2)
 
@@ -149,7 +167,6 @@ class BayesianLinearRegression:
         """
         # todo <your code here>
         return None
-
 
 class LinearRegression:
 
@@ -198,6 +215,79 @@ class LinearRegression:
         """
         self.fit(X, y)
         return self.predict(X)
+
+def plot_posterior_with_samples(
+        train_hours: np.ndarray,
+        train_temps: np.ndarray,
+        test_hours: np.ndarray,
+        test_temps: np.ndarray,
+        predicted_mean_temps: np.ndarray,
+        pred_std: np.ndarray,
+        title: str,
+        save_path: str,
+        model: BayesianLinearRegression,
+        num_samples: int = 5
+    ):
+    """
+    Plots the full Posterior analysis:
+    1. Observed Data (Train) and Future Truth (Test) as scatter points.
+    2. Posterior Mean (MMSE) & Confidence Interval.
+    3. Random Samples from the Posterior distribution.
+    
+    Args:
+        model: The BayesianLinearRegression object (must be fitted!).
+        plot_range (np.array): Dense intervals (0, 0.1, 0.2...) for smooth curves.
+        train_hours, train_temps: The morning data (0-12).
+        test_hours, test_temps: The afternoon data (12-24).
+        num_samples (int): Number of random functions to sample from the posterior.
+    """
+    plt.figure(figsize=(10, 6))
+    
+    # --- LAYER 1: Scatter Data Points ---
+    # Plot Morning Data (Train) - What the model SAW
+    plt.scatter(train_hours, train_temps, color='blue', s=40, zorder=5, label='Observed (Train)')
+    
+    # Plot Afternoon Data (Test) - What the model is TRYING to predict
+    plt.scatter(test_hours, test_temps, color='red', s=40, marker='x', zorder=5, label='Ground Truth (Test)')
+    
+    # Plot Mean (MMSE)
+    plt.plot(test_hours, predicted_mean_temps, color='black', linewidth=3, label='MMSE Prediction', zorder=4)
+    
+    # Plot Confidence Interval
+    plt.fill_between(test_hours,
+                     predicted_mean_temps - pred_std, 
+                     predicted_mean_temps + pred_std, 
+                     color='blue', alpha=0.2, label='Confidence Interval (1$\sigma$)', zorder=2)
+
+    # --- LAYER 3: Random Samples from Posterior ---
+    
+    # 1. Add jitter for numerical stability
+    jitter = 1e-6 * np.eye(len(model.posterior_cov))
+    safe_cov = model.posterior_cov + jitter
+    
+    # 2. Sample random weights from N(mu_N, Sigma_N)
+    sampled_thetas = np.random.multivariate_normal(model.posterior_mean, safe_cov, num_samples)
+    
+    samples_d_matrix = model.basis_functions(test_hours)
+    
+    # 4. Plot samples
+    for i, theta_sample in enumerate(sampled_thetas):
+        y_sample = samples_d_matrix @ theta_sample
+        plt.plot(test_hours, y_sample, linestyle='--', linewidth=1, alpha=0.8, label=f'Posterior Sample {i+1}', zorder=3)
+
+    # --- Styling ---
+    plt.title(title)
+    plt.xlabel('Time of Day (Hours)')
+    plt.ylabel('Temperature')
+    plt.xlim(0, 24)
+    
+    # Handle Legend (Filter duplicates if necessary)
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    plt.legend(by_label.values(), by_label.keys(), loc='upper left', fontsize='small')
+    
+    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.savefig(save_path)
 
 def plot_predictions_for_bayesian_model(
         train_hours: np.ndarray,
@@ -279,37 +369,72 @@ def classical_linear_regression(train_hours, train_temperature, test_hours, test
         plot_predictions_gt(hours=test_hours,
                             true_temps=test_temperatures,
                             predicted_temps=pred_mean,
-                            save_path=path.join(DATA_DIRECTORY, f'true_vs_pred_temps_d{d}_lr.png'),
+                            save_path=path.join(OUTPUT_DATA_DIRECTORY, f'true_vs_pred_temps_d{d}_lr.png'),
                             title=f'LR Predictions vs Ground Truth (d={d})\nMSE={mse:.2f}')
 
-def bayesian_linear_regression(degrees, hours, temps, sigma):
-    for deg in degrees:
-        pbf = polynomial_basis_functions(deg)
-        mu, cov = learn_prior(hours, temps, pbf)
+def bayesian_regression_base_functions(
+        hours: np.ndarray,
+        temps: np.ndarray,
+        sigma: float,
+        post_train_hours: np.ndarray,
+        post_train_temps: np.ndarray,
+        post_test_hours: np.ndarray,
+        post_test_temps: np.ndarray,
+        base_func: Callable,
+        iteration_range: list,
+        names_of_iterations: str,
+        base_func_type: str
+    ):
+    '''
+    Perform Bayesian linear regression for different polynomial degrees
+    :param degrees: list of polynomial degrees to use
+    :param hours: historic input hours
+    :param temps: historic temperatures
+    :param sigma: signal noise
+    :param new_hours: new input hours for posterior fitting
+    :param new_temps: new temperatures for posterior fitting
+    :param post_hours_to_predict: hours to predict posterior temperatures for
+    '''
+    for iteration in iteration_range:
+        bf = base_func(iteration)
+        mu, cov = learn_prior(hours, temps, bf)
 
-        blr = BayesianLinearRegression(mu, cov, sigma, pbf)
+        blr = BayesianLinearRegression(mu, cov, sigma, bf)
 
         # plot prior graphs
-        hours_to_predict = np.arange(0, 24, 0.1)
-        pred_mean, pred_std = blr.predict(hours_to_predict)
+        prior_hours_to_predict = np.arange(0, 24, 0.1)
+        prior_pred_mean, prior_pred_std = blr.predict(prior_hours_to_predict)
         plot_predictions_for_bayesian_model(
             train_hours=hours,
             train_temps=temps,
-            predict_hours=hours_to_predict,
-            predicted_mean_temps=pred_mean,
-            pred_std=pred_std,
-            deg=deg,
-            title=f'Bayesian LR - Prior Predictions (Degree={deg})',
-            save_path=path.join(DATA_DIRECTORY, f'bayesian_lr_prior_deg{deg}.png'),
-            model=blr,
+            predict_hours=prior_hours_to_predict,
+            predicted_mean_temps=prior_pred_mean,
+            pred_std=prior_pred_std,
+            title=f'BLR - Prior Predictions {base_func_type}({names_of_iterations}={iteration if not isinstance(iteration, np.ndarray) else np.array2string(iteration, separator=", ")})',
+            save_path=path.join(OUTPUT_DATA_DIRECTORY, f'blr_prior_{base_func_type}_{names_of_iterations}{iteration if not isinstance(iteration, np.ndarray) else np.array2string(iteration, separator=", ")}.png'),
+            model=blr
+        )
+
+        blr.fit(post_train_hours, post_train_temps)
+        # plot posterior graphs
+        # todo <your code here>
+        post_pred_mean, post_pred_std = blr.predict(post_test_hours)
+        average_squared_error = np.mean((post_test_temps - post_pred_mean)**2)
+        plot_posterior_with_samples(
+            train_hours=post_train_hours,
+            train_temps=post_train_temps,
+            test_hours=post_test_hours,
+            test_temps=post_test_temps,
+            predicted_mean_temps=post_pred_mean,
+            pred_std=post_pred_std,
+            title=f'BLR - Posterior Predictions {base_func_type}({names_of_iterations}={iteration})\nAverage Squared Error MSE={average_squared_error:.2f}',
+            save_path=path.join(OUTPUT_DATA_DIRECTORY, f'blr_posterior_{base_func_type}_{names_of_iterations}{iteration}.png'),
+            model=blr
         )
 
 
-        # plot posterior graphs
-        # todo <your code here>
-
 def main():
-    nov_16_path = path.join(DATA_DIRECTORY, 'nov162024.npy')
+    nov_16_path = path.join(INPUT_DATA_DIRECTORY, 'nov162024.npy')
     # load the data for November 16 2024
     nov16_temperatures = np.load(nov_16_path)
     nov16_hours = np.arange(0, 24, .5)
@@ -326,11 +451,10 @@ def main():
 
     # ----------------------------------------- Bayesian Linear Regression
 
-    jerus_daytemps_path = path.join(DATA_DIRECTORY, 'jerus_daytemps.npy')
+    jerus_daytemps_path = path.join(INPUT_DATA_DIRECTORY, 'jerus_daytemps.npy')
     # load the historic data
     temps = np.load(jerus_daytemps_path).astype(np.float64)
     hours = np.array([2, 5, 8, 11, 14, 17, 20, 23]).astype(np.float64)
-    x = np.arange(0, 24, .1)
 
     # setup the model parameters
     sigma = 0.25
@@ -342,33 +466,51 @@ def main():
              np.array([6, 12, 18])]
 
     # ---------------------- polynomial basis functions
-    bayesian_linear_regression(degrees, hours, temps, sigma)
+    bayesian_regression_base_functions(
+        hours=hours,
+        temps=temps,
+        sigma=sigma,
+        post_train_hours=train_hours,
+        post_train_temps=train_temperature,
+        post_test_hours=test_hours,
+        post_test_temps=test_temperatures,
+        base_func=polynomial_basis_functions,
+        iteration_range=degrees,
+        names_of_iterations="Degree",
+        base_func_type="polynomial"
+    )
 
     # ---------------------- Gaussian basis functions
-    for ind, K in enumerate(freqs):
-        rbf = fourier_basis_functions(K)
-        mu, cov = learn_prior(hours, temps, rbf)
 
-        blr = BayesianLinearRegression(mu, cov, sigma, rbf)
-
-        # plot prior graphs
-        # todo <your code here>
-
-        # plot posterior graphs
-        # todo <your code here>
+    bayesian_regression_base_functions(
+        hours=hours,
+        temps=temps,
+        sigma=sigma,
+        post_train_hours=train_hours,
+        post_train_temps=train_temperature,
+        post_test_hours=test_hours,
+        post_test_temps=test_temperatures,
+        base_func=fourier_basis_functions,
+        iteration_range=freqs,
+        names_of_iterations="NumFreqs",
+        base_func_type="fourier"
+    )
 
     # ---------------------- cubic regression splines
-    for ind, k in enumerate(knots):
-        spline = spline_basis_functions(k)
-        mu, cov = learn_prior(hours, temps, spline)
 
-        blr = BayesianLinearRegression(mu, cov, sigma, spline)
-
-        # plot prior graphs
-        # todo <your code here>
-
-        # plot posterior graphs
-        # todo <your code here>
+    bayesian_regression_base_functions(
+        hours=hours,
+        temps=temps,
+        sigma=sigma,
+        post_train_hours=train_hours,
+        post_train_temps=train_temperature,
+        post_test_hours=test_hours,
+        post_test_temps=test_temperatures,
+        base_func=spline_basis_functions,
+        iteration_range=knots,
+        names_of_iterations="NumKnots",
+        base_func_type="spline"
+    )
 
 
 if __name__ == '__main__':

@@ -3,7 +3,8 @@ from scipy.ndimage import convolve
 from skimage.color import rgb2gray
 from matplotlib import pyplot as plt
 from os import path
-DATA_DIRECTORY = path.abspath('data/')
+OUTPUT_DATA_DIRECTORY = path.abspath('data/output')
+INPUT_DATA_DIRECTORY = path.abspath('data/input')
 
 def plot_predictions_gt(hours: np.ndarray, true_temps: np.ndarray, predicted_temps: np.ndarray, save_path: str, title: str = 'Predictions vs Ground Truth'):
     """
@@ -43,7 +44,7 @@ def temps_example():
     """
     An example of how to load the temperature data. Note that there are 2 data sets here
     """
-    X = np.load(path.join(DATA_DIRECTORY, 'jerus_daytemps.npy'))
+    X = np.load(path.join(INPUT_DATA_DIRECTORY, 'jerus_daytemps.npy'))
     hours = [2, 5, 8, 11, 14, 17, 20, 23]
     plt.figure()
     for i in range(X.shape[0]):
@@ -52,7 +53,7 @@ def temps_example():
     plt.xlabel('hour')
     plt.ylabel('temperature [C]')
 
-    y = np.load(path.join(DATA_DIRECTORY, 'nov162024.npy'))
+    y = np.load(path.join(INPUT_DATA_DIRECTORY, 'nov162024.npy'))
     hours = np.arange(0, 24, .5)
     plt.figure()
     plt.plot(hours, y, lw=2)
