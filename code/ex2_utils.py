@@ -1,6 +1,4 @@
 import numpy as np
-from scipy.ndimage import convolve
-from skimage.color import rgb2gray
 from matplotlib import pyplot as plt
 from os import path
 OUTPUT_DATA_DIRECTORY = path.abspath('data/output')
