@@ -1,8 +1,8 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from os import path
-OUTPUT_DATA_DIRECTORY = path.abspath('data/output')
-INPUT_DATA_DIRECTORY = path.abspath('data/input')
+OUTPUT_DATA_DIRECTORY = path.abspath('data/output/ex2')
+INPUT_DATA_DIRECTORY = path.abspath('data/input/ex2')
 
 def plot_predictions_gt(hours: np.ndarray, true_temps: np.ndarray, predicted_temps: np.ndarray, save_path: str, title: str = 'Predictions vs Ground Truth'):
     """

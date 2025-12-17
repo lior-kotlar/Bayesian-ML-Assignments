@@ -19,6 +19,14 @@
             "request": "launch",
             "program": "C:\\Users\\liork\\Documents\\Masters\\master modules\\Bayesian Machine Learning\\Bayesian-ML-Assignments\\code\\ex2.py",
             "console": "integratedTerminal"
+        },
+
+        {
+            "name": "Pydbg: ex3",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "C:\\Users\\liork\\Documents\\Masters\\master modules\\Bayesian Machine Learning\\Bayesian-ML-Assignments\\code\\ex3.py",
+            "console": "integratedTerminal"
         }
     ]
 }

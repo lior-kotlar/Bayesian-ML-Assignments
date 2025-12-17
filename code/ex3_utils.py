@@ -1,7 +1,10 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from typing import Callable
+from os import path
 
+INPUT_DATA_DIRECTORY = path.abspath('data/input/ex3')
+OUTPUT_DATA_DIRECTORY = path.abspath('data/output/ex3')
 
 def polynomial_basis_functions(degree: int) -> Callable:
     """
