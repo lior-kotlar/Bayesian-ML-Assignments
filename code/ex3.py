@@ -100,6 +100,27 @@ def plot_evidence_vs_degree(degrees, degree_evidences, function_index, x, y, alp
     plt.close()
     print(f'Saved {plot2_filename}\n' + '-'*30)
 
+def plot_noise_evidence(noise_vars, evs):
+    # plot log-evidence versus amount of sample noise
+    # <your code here>
+    best_idx = np.argmax(evs)
+    best_noise_var = noise_vars[best_idx]
+    max_ev = evs[best_idx]
+
+    print(f'Optimal noise variance: {best_noise_var}, Log-Evidence: {max_ev}')
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(noise_vars, evs, marker='o', linestyle='-', linewidth=2, label='Log-Evidence')
+    plt.scatter(best_noise_var, max_ev, color='red', s=150, marker='*', zorder=5, 
+                label=f'Optimal Noise Variance ({best_noise_var:.2f})')
+    plt.title('Log-Evidence vs. Noise Variance for Temperature Data')
+    plt.xlabel('Sample Noise Variance (σ²)')
+    plt.ylabel('Log-Evidence Score')
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plot_filename = path.join(OUTPUT_DATA_DIRECTORY, 'temperature_noise_evidence.png')
+    plt.savefig(plot_filename)
+    plt.close()
 
 def main():
     # ------------------------------------------------------ section 2.1
@@ -153,10 +174,10 @@ def main():
         mdl = BayesianLinearRegression(mu, cov, n, pbf)
         log_ev = log_evidence(mdl, hours_train, train)
         # <your code here>
+        evs[i] = log_ev
 
-    # plot log-evidence versus amount of sample noise
-    # <your code here>
-
+    plot_noise_evidence(noise_vars, evs)
+    
 
 if __name__ == '__main__':
     main()
