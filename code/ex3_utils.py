@@ -122,7 +122,7 @@ def load_prior():
     An example of how to load the supplied prior for questions 5-7
     :return: the mean and covariance of the prior needed for questions 5-7
     """
-    params = np.load('temp_prior.npy')
+    params = np.load(path.join(INPUT_DATA_DIRECTORY, 'temp_prior.npy'))
 
     # load the mean of the prior
     mean = params[:, 0]

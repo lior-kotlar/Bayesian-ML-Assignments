@@ -39,24 +39,18 @@ def log_evidence(model: BayesianLinearRegression, X, y):
 
     return term_likelihood + prior_term + norm_term
 
-def plot_evidence_vs_degree(degrees, degree_evidences, function_index, x):
-    # --- Find Best and Worst Models ---
+def plot_evidence_vs_degree(degrees, degree_evidences, function_index, x, y, alpha, noise_var):
     best_degree_idx = np.argmax(degree_evidences)
     best_degree = degrees[best_degree_idx]
     
     worst_degree_idx = np.argmin(degree_evidences)
     worst_degree = degrees[worst_degree_idx]
 
-    # --- Create a dense grid for smooth plotting of predictions ---
     x_plot = np.linspace(np.min(x), np.max(x), 1000)
 
-    # ============================================
-    # Plot Type 1: Log-Evidence vs. Degree
-    # ============================================
     plt.figure(figsize=(8, 5))
     plt.plot(degrees, degree_evidences, marker='o', linestyle='-', linewidth=2, label='Log-Evidence')
     
-    # Highlight the Winner
     plt.scatter(best_degree, degree_evidences[best_degree_idx], color='red', s=150, marker='*', zorder=5, 
                 label=f'Best Model (d={best_degree})')
 
@@ -66,11 +60,45 @@ def plot_evidence_vs_degree(degrees, degree_evidences, function_index, x):
     plt.grid(True, alpha=0.3)
     plt.legend()
     
-    # Save and close
     plot1_filename = path.join(OUTPUT_DATA_DIRECTORY, f'evidence_score_f{function_index+1}.png')
     plt.savefig(plot1_filename)
     plt.close()
     print(f'Saved {plot1_filename}')
+
+    plt.figure(figsize=(10, 6))
+
+    plt.scatter(x, y, s=15, color='gray', alpha=0.4, label='Noisy Data', zorder=1)
+
+    def plot_model_predictions(degree, color, label_prefix, linestyle='-'):
+        pbf = polynomial_basis_functions(degree)
+        mean_prior, cov_prior = np.zeros(degree + 1), np.eye(degree + 1) * alpha
+        
+        model = BayesianLinearRegression(mean_prior, cov_prior, noise_var, pbf)
+        model.fit(x, y)
+        
+        y_mean = model.predict(x_plot)
+        y_std = model.predict_std(x_plot)
+        
+        plt.plot(x_plot, y_mean, color=color, linewidth=2, linestyle=linestyle, zorder=3,
+                    label=f'{label_prefix} (d={degree})')
+        plt.fill_between(x_plot, y_mean - y_std, y_mean + y_std, color=color, alpha=0.2, zorder=2)
+
+    plot_model_predictions(best_degree, color='blue', label_prefix='Best Model')
+
+    if best_degree != worst_degree:
+        plot_model_predictions(worst_degree, color='red', label_prefix='Worst Model', linestyle='--')
+
+    plt.title(f'Best vs. Worst Model Fit (Function f{function_index+1})')
+    plt.xlabel('x')
+    plt.ylabel('y')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.ylim(np.min(y)-2, np.max(y)+2)
+
+    plot2_filename = path.join(OUTPUT_DATA_DIRECTORY, f'best_vs_worst_f{function_index+1}.png')
+    plt.savefig(plot2_filename)
+    plt.close()
+    print(f'Saved {plot2_filename}\n' + '-'*30)
 
 
 def main():
@@ -105,7 +133,7 @@ def main():
 
         # plot evidence versus degree and predicted fit
         # <your code here>
-        plot_evidence_vs_degree(degrees, degree_evidences, i, x)
+        plot_evidence_vs_degree(degrees, degree_evidences, i, x, y, alpha, noise_var)
         
     # ------------------------------------------------------ section 2.2
     # load relevant data
