@@ -29,8 +29,13 @@ def RBF_kernel(alpha: float, beta: float) -> Callable:
     :return: a function that receives two inputs and returns the output of the kernel applied to these inputs
     """
     def kern(x, y):
-        # todo <your code here>
-        return None
+        if np.ndim(x) == 1:
+            x = x.reshape(-1, 1)
+        if np.ndim(y) == 1:
+            y = y.reshape(-1, 1)
+        
+        sqdist = cdist(x, y, metric='sqeuclidean')
+        return alpha * np.exp(-beta * sqdist)
     return kern
 
 
@@ -42,8 +47,12 @@ def Laplacian_kernel(alpha: float, beta: float) -> Callable:
     :return: a function that receives two inputs and returns the output of the kernel applied to these inputs
     """
     def kern(x, y):
-        # todo <your code here>
-        return None
+        if np.ndim(x) == 1:
+            x = x.reshape(-1, 1)
+        if np.ndim(y) == 1:
+            y = y.reshape(-1, 1)
+        dist = cdist(x, y, metric='cityblock')
+        return alpha * np.exp(-beta * dist)
     return kern
 
 
@@ -53,8 +62,13 @@ def Spectral_kernel(alpha: float, beta: float, gamma: float) -> Callable:
     :return: a function that receives two inputs and returns the output of the kernel applied to these inputs
     """
     def kern(x, y):
-        # todo <your code here>
-        return None
+        if np.ndim(x) == 1:
+            x = x.reshape(-1, 1)
+        if np.ndim(y) == 1:
+            y = y.reshape(-1, 1)
+        sqdist = cdist(x, y, metric='sqeuclidean')
+        dists = np.sqrt(sqdist)
+        return alpha * np.exp(-beta * sqdist) * np.cos(np.pi * dists / gamma)
     return kern
 
 
@@ -64,8 +78,19 @@ def NN_kernel(alpha: float, beta: float) -> Callable:
     :return: a function that receives two inputs and returns the output of the kernel applied to these inputs
     """
     def kern(x, y):
-        # todo <your code here>
-        return None
+        if np.ndim(x) == 1:
+            x = x.reshape(-1, 1)
+        if np.ndim(y) == 1:
+            y = y.reshape(-1, 1)
+        
+        dot_products = x @ y.T
+        numerator = 2 * beta * (dot_products) + 1
+        x_norms_squared = np.sum(x**2, axis=1)
+        y_norms_squared = np.sum(y**2, axis=1)
+        denom_x = 1 + 2 * beta * (1 + x_norms_squared)
+        denom_y = 1 + 2 * beta * (1 + y_norms_squared)
+        denominator = np.sqrt(np.outer(denom_x, denom_y))
+        return alpha * (2.0/np.pi) * np.arcsin(numerator / denominator)
     return kern
 
 
