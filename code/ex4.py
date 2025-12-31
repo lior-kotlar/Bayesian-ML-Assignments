@@ -211,22 +211,22 @@ def main():
         # Laplacian kernels
         ['Laplacian', Laplacian_kernel, 1, 0.025],           # insert your parameters, order: alpha, beta
         ['Laplacian', Laplacian_kernel, 1, 1.0],        
-        ['Laplacian', Laplacian_kernel, 5, 0.5],        
+        ['Laplacian', Laplacian_kernel, 10, 1.0],        
 
         # RBF kernels
         ['RBF', RBF_kernel, 1, 0.025],                       # insert your parameters, order: alpha, beta
-        ['RBF', RBF_kernel, 1, 3.0],        
-        ['RBF', RBF_kernel, 0.1, 0.25],                    
+        ['RBF', RBF_kernel, 1, 1.0],        
+        ['RBF', RBF_kernel, 10, 1.0],                    
 
         # Gibbs kernels
-        ['Spectral', Spectral_kernel, 1, 0.5, 3],            # insert your parameters, order: alpha, beta, gamma
-        ['Spectral', Spectral_kernel, 1, 0.1, 10],    
-        ['Spectral', Spectral_kernel, 1, 0.05, 0.2],    
+        ['Spectral', Spectral_kernel, 1, 0.005, 1],            # insert your parameters, order: alpha, beta, gamma
+        ['Spectral', Spectral_kernel, 1, 0.05, 1],    
+        ['Spectral', Spectral_kernel, 1, 0.5, 1],    
 
         # Neurel network kernels
-        ['NN', NN_kernel, 100, 0.05],                         # insert your parameters, order: alpha, beta
-        ['NN', NN_kernel, 1, 5],                      
-        ['NN', NN_kernel, 10, 5],                     
+        ['NN', NN_kernel, 0.5, 0.005],                         # insert your parameters, order: alpha, beta
+        ['NN', NN_kernel, 0.5, 0.5],                      
+        ['NN', NN_kernel, 0.5, 50],                     
     ]
     noise_var = 0.05
 
@@ -258,7 +258,11 @@ def main():
         plt.title(KERNEL_STRS[p[0]].format(*p[2:]))
         plt.ylim([-5, 5])
 
-        filename_prior = f"data/output/ex4/{p[0]}_Prior.png"
+        hyper_parameters_string = f'_a={p[2]}_b={p[3]}'
+        if p[0] == 'Spectral':
+            hyper_parameters_string += f'_g={p[4]}'
+
+        filename_prior = f"data/output/ex4/{p[0]}_Prior{hyper_parameters_string}.png"
         plt.savefig(filename_prior)
         plt.close()
 
@@ -276,11 +280,7 @@ def main():
         plt.ylabel('$f(x)$')
         plt.title(KERNEL_STRS[p[0]].format(*p[2:]))
         plt.ylim([-5, 5])
-        hyper_parameters_string = ''
-        if p[0] == 'Spectral' or p[0] == 'NN':
-            hyper_parameters_string = f'_a={p[2]}_b={p[3]}'
-            if p[0] == 'Spectral':
-                hyper_parameters_string += f'_g={p[4]}'
+        
         filename_posterior = f"data/output/ex4/{p[0]}_Posterior{hyper_parameters_string}.png"
         plt.savefig(filename_posterior)
         plt.close()
