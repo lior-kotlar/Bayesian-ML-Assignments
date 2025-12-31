@@ -1,6 +1,8 @@
+import os
 import numpy as np
 from typing import Callable
 from matplotlib import pyplot as plt
+from scipy.linalg import cho_solve, solve_triangular, cholesky
 from scipy.spatial.distance import cdist
 
 KERNEL_STRS = {
@@ -118,7 +120,11 @@ class GaussianProcess:
         :param y: the true regression values for the samples X
         :return: the fitted model
         """
-        # todo <your code here>
+        self.x_train = X
+        self.y_train = y
+        K_noise = self.kernel(X, X) + self.noise * np.eye(len(X))
+        self.L = cholesky(K_noise, lower=True)
+        self.alpha = cho_solve((self.L, True), y)
         return self
 
     def predict(self, X: np.ndarray) -> np.ndarray:
@@ -127,8 +133,10 @@ class GaussianProcess:
         :param X: the samples to predict
         :return: the predictions for X
         """
-        # todo <your code here>
-        return None
+        k_star = self.kernel(self.x_train, X)
+        mean_predictions = k_star.T @ self.alpha
+
+        return mean_predictions
 
     def fit_predict(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
         """
@@ -146,8 +154,20 @@ class GaussianProcess:
         :param X: the samples around which to calculate the standard deviation
         :return: a numpy array with the sample (same shape as X)
         """
-        # todo <your code here>
-        return None
+        k_ss = self.kernel(X, X)
+        if self.x_train is None:
+            mu = np.zeros(X.shape[0])
+            cov = k_ss
+        else:
+            k_star = self.kernel(self.x_train, X)
+            v = solve_triangular(self.L, k_star, lower=True)
+            mu = k_star.T @ self.alpha
+            cov = k_ss - v.T @ v
+        
+        cov += 1e-8 * np.eye(X.shape[0])
+        l_sample = cholesky(cov, lower=True)
+        z = np.random.normal(size=X.shape[0])
+        return mu + l_sample @ z
 
     def predict_std(self, X: np.ndarray) -> np.ndarray:
         """
@@ -155,8 +175,15 @@ class GaussianProcess:
         :param X: the samples around which to calculate the standard deviation
         :return: a numpy array with the standard deviations (same shape as X)
         """
-        # todo <your code here>
-        return None
+        if self.x_train is None:
+            return np.sqrt(np.diagonal(self.kernel(X, X)))
+        k_star = self.kernel(self.x_train, X)
+        v = solve_triangular(self.L, k_star, lower=True)
+        k_diag = np.diagonal(self.kernel(X, X))
+        v_squared_sum = np.sum(v**2, axis=0)
+        variance = k_diag - v_squared_sum
+        variance = np.maximum(variance, 0)
+        return np.sqrt(variance)
 
     def log_evidence(self, X: np.ndarray, y: np.ndarray) -> float:
         """
@@ -166,8 +193,11 @@ class GaussianProcess:
         :return: the log-evidence of the model under the data points
         """
         self.fit(X, y)
-        # todo <your code here>
-        return None
+        term1 = -0.5 * y.T @ self.alpha
+        term2 = -np.sum(np.log(np.diagonal(self.L)))
+        n = len(y)
+        term3 = - (n / 2) * np.log(2 * np.pi)
+        return term1 + term2 + term3
 
 
 def main():
@@ -179,29 +209,32 @@ def main():
     # choose kernel parameters
     params = [
         # Laplacian kernels
-        ['Laplacian', Laplacian_kernel, 1, 0.25],           # insert your parameters, order: alpha, beta
-        ['Laplacian', Laplacian_kernel, None, None],        # insert your parameters, order: alpha, beta
-        ['Laplacian', Laplacian_kernel, None, None],        # insert your parameters, order: alpha, beta
+        ['Laplacian', Laplacian_kernel, 1, 0.025],           # insert your parameters, order: alpha, beta
+        ['Laplacian', Laplacian_kernel, 1, 1.0],        
+        ['Laplacian', Laplacian_kernel, 5, 0.5],        
 
         # RBF kernels
-        ['RBF', RBF_kernel, 1, 0.25],                       # insert your parameters, order: alpha, beta
-        ['RBF', RBF_kernel, None, None],                    # insert your parameters, order: alpha, beta
-        ['RBF', RBF_kernel, None, None],                    # insert your parameters, order: alpha, beta
+        ['RBF', RBF_kernel, 1, 0.025],                       # insert your parameters, order: alpha, beta
+        ['RBF', RBF_kernel, 1, 3.0],        
+        ['RBF', RBF_kernel, 0.1, 0.25],                    
 
         # Gibbs kernels
-        ['Spectral', Spectral_kernel, 1, .5, 3],            # insert your parameters, order: alpha, beta, gamma
-        ['Spectral', Spectral_kernel, None, None, None],    # insert your parameters, order: alpha, beta, gamma
-        ['Spectral', Spectral_kernel, None, None, None],    # insert your parameters, order: alpha, beta, gamma
+        ['Spectral', Spectral_kernel, 1, 0.5, 3],            # insert your parameters, order: alpha, beta, gamma
+        ['Spectral', Spectral_kernel, 1, 0.1, 10],    
+        ['Spectral', Spectral_kernel, 1, 0.05, 0.2],    
 
         # Neurel network kernels
-        ['NN', NN_kernel, 1, 0.25],                         # insert your parameters, order: alpha, beta
-        ['NN', NN_kernel, None, None],                      # insert your parameters, order: alpha, beta
-        ['NN', NN_kernel, None, None],                      # insert your parameters, order: alpha, beta
+        ['NN', NN_kernel, 100, 0.05],                         # insert your parameters, order: alpha, beta
+        ['NN', NN_kernel, 1, 5],                      
+        ['NN', NN_kernel, 10, 5],                     
     ]
     noise_var = 0.05
 
+    if not os.path.exists('data/output/ex4'):
+        os.makedirs('data/output/ex4')
+
     # plot all of the chosen parameter settings
-    for p in params:
+    for i, p in enumerate(params):
         # create kernel according to parameters chosen
         k = p[1](*p[2:])    # p[1] is the kernel function while p[2:] are the kernel parameters
 
@@ -210,11 +243,24 @@ def main():
 
         # plot prior variance and samples from the priors
         plt.figure()
-        # todo <your code here>
+
+        m_prior = np.zeros_like(xx)
+        s_prior = 2*gp.predict_std(xx)
+
+        plt.fill_between(xx, m_prior - s_prior, m_prior + s_prior, alpha=.3, color='blue')
+        plt.plot(xx, m_prior, 'k--', lw=2)
+
+        for i in range(5):
+            plt.plot(xx, gp.sample(xx), lw=1)
+        
         plt.xlabel('$x$')
         plt.ylabel('$f(x)$')
         plt.title(KERNEL_STRS[p[0]].format(*p[2:]))
         plt.ylim([-5, 5])
+
+        filename_prior = f"data/output/ex4/{p[0]}_Prior.png"
+        plt.savefig(filename_prior)
+        plt.close()
 
         # fit the GP to the data and calculate the posterior mean and confidence interval
         gp.fit(x, y)
@@ -230,37 +276,64 @@ def main():
         plt.ylabel('$f(x)$')
         plt.title(KERNEL_STRS[p[0]].format(*p[2:]))
         plt.ylim([-5, 5])
-        plt.show()
-
+        hyper_parameters_string = ''
+        if p[0] == 'Spectral' or p[0] == 'NN':
+            hyper_parameters_string = f'_a={p[2]}_b={p[3]}'
+            if p[0] == 'Spectral':
+                hyper_parameters_string += f'_g={p[4]}'
+        filename_posterior = f"data/output/ex4/{p[0]}_Posterior{hyper_parameters_string}.png"
+        plt.savefig(filename_posterior)
+        plt.close()
+    
     # ------------------------------ question 4
     # define range of betas
     betas = np.linspace(0.1, 7, 101)
     noise_var = .27
+    alpha = 1.0
 
     # calculate the evidence for each of the kernels
-    evidence = [GaussianProcess(RBF_kernel(1, beta=b), noise_var).log_evidence(x, y) for b in betas]
+    evidence = [GaussianProcess(RBF_kernel(alpha, beta=b), noise_var).log_evidence(x, y) for b in betas]
 
     # plot the evidence as a function of beta
     plt.figure()
     plt.plot(betas, evidence, lw=2)
     plt.xlabel(r'$\beta$')
     plt.ylabel('log-evidence')
-    plt.show()
+    plt.title('Log-Marginal Likelihood vs Beta')
+    best_beta_idx = np.argmax(evidence)
+    plt.axvline(betas[best_beta_idx], color='r', linestyle='--', label=f'Best Beta: {betas[best_beta_idx]:.2f}')
+    plt.legend()
+    plt.savefig('data/output/ex4/Evidence_Score.png')
 
     # extract betas that had the min, median and max evidence
     srt = np.argsort(evidence)
-    min_ev, median_ev, max_ev = betas[srt[0]], betas[srt[(len(evidence)+1)//2]], betas[srt[-1]]
+    median_idx = srt[len(evidence)//2]
+    selected_betas = {
+        'Min Evidence': betas[srt[0]],
+        'Median Evidence': betas[median_idx],
+        'Max Evidence': betas[srt[-1]]
+    }
+
+    plt.figure(figsize=(12, 4))
+    colors = {'Min Evidence': 'red', 'Median Evidence': 'orange', 'Max Evidence': 'green'}
+
+    for label, beta in selected_betas.items():
+        gp = GaussianProcess(RBF_kernel(alpha, beta=beta), noise_var).fit(x, y)
+        m = gp.predict(xx)
+        s = 2 * gp.predict_std(xx)
+
+        plt.plot(xx, m, lw=2, label=f'{label} (Beta={beta:.2f})', color=colors[label])
+        plt.fill_between(xx, m - s, m + s, alpha=0.1, color=colors[label])
+
+    plt.scatter(x, y, 50, 'k', zorder=10, label='Data')
 
     # plot the mean of the posterior of a GP using the extracted betas on top of the data
-    plt.figure()
-    plt.plot(xx, GaussianProcess(RBF_kernel(1, beta=min_ev), noise_var).fit(x, y).predict(xx), lw=2, label='min evidence')
-    plt.plot(xx, GaussianProcess(RBF_kernel(1, beta=median_ev), noise_var).fit(x, y).predict(xx), lw=2, label='median evidence')
-    plt.plot(xx, GaussianProcess(RBF_kernel(1, beta=max_ev), noise_var).fit(x, y).predict(xx), lw=2, label='max evidence')
-    plt.scatter(x, y, 30, 'k', alpha=.5)
     plt.xlabel(r'$x$')
     plt.ylabel(r'$f(x)$')
+    plt.title('Comparison of Best, Worst, and Median Betas')
     plt.legend()
-    plt.show()
+    plt.ylim([-5, 5])
+    plt.savefig('data/output/ex4/Evidence_Comparison.png')
 
 
 if __name__ == '__main__':
